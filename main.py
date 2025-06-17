@@ -1,46 +1,74 @@
-import streamlit as st
-import speech_recognition as sr
-import pyttsx3
-from main import get_bot_response
+import os
+from langchain_groq import ChatGroq
+from langchain_core.prompts import PromptTemplate
+from langchain_community.vectorstores import Chroma
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.document_loaders import TextLoader
+import google.generativeai as genai
+from dotenv import load_dotenv
+load_dotenv()
 
-st.set_page_config(page_title="Voice Bot", page_icon="🎤")
-st.title("Voice Bot with Voice Input & Output")
+llm = ChatGroq(
+    model="qwen/qwen3-32b",
+    temperature=0.1,
+)
 
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
-def SpeakText(command):
-    engine = pyttsx3.init()
-    engine.say(command)
-    engine.runAndWait()
+class GeminiEmbeddings():
+    def embed_documents(self, texts):
+        return [
+            genai.embed_content(
+                model="models/embedding-001",
+                content=text
+            )['embedding']
+            for text in texts
+        ]
+    def embed_query(self, text):
+        return genai.embed_content(
+            model="models/embedding-001",
+            content=text
+        )['embedding']
 
+loader = TextLoader("doc.txt")
+documents = loader.load()
 
-col1, col2 = st.columns([8,1])
-with col1:
-    user_input = st.text_input("Type your message or use the mic:", key="text_input")
-with col2:
-    voice_clicked = st.button("🎤", help="Click to speak")
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=50)
+texts = text_splitter.split_documents(documents)
 
+vector_store = Chroma(
+    collection_name="doc_collection",
+    embedding_function=GeminiEmbeddings(),
+    persist_directory="db",
+)
 
-if voice_clicked:
-    r = sr.Recognizer()
-    with sr.Microphone() as source:
-        st.info("Listening... Please speak now.")
-        r.adjust_for_ambient_noise(source, duration=0.2)
-        audio = r.listen(source)
-        try:
-            MyText = r.recognize_google(audio)
-            st.session_state["text_input"] = MyText
-            st.success(f"You said: {MyText}")
-        except sr.RequestError as e:
-            st.error(f"Could not request results; {e}")
-        except sr.UnknownValueError:
-            st.error("Sorry, I could not understand your voice.")
-    st.experimental_rerun()
+vector_store.add_documents(texts)
 
+retriever = vector_store.as_retriever(
+    search_type="mmr",
+    search_kwargs={"k": 6},
+)
 
-bot_response = None
-if st.button("Send"):
-    if user_input.strip():
-        st.write(f"**You:** {user_input}")
-        bot_response = get_bot_response(user_input)
-        st.write(f"**Bot:** {bot_response}")
-        SpeakText(bot_response)
+prompt = PromptTemplate(
+    template="You are a bot of me ie Kirpal Singh. You will be used to answer questions like I do according to my style. I am a little shy, silent and reserved person. You have to answer the questions asked by the user using the context \n {context} and Question is Kirpal can you tell me about \n {question} I am Kirpal Singh and I am a student of Integrated MTech in AIML. I am from India and I am 23 years old. I am a little shy, silent and reserved person.  \n Answer the question in my style and stick to the context provided and don't assume anything by yourself and only take relevant context according to the question asked. If the question are not related to the context then say I am sorry I can't answer that question.",
+    input_variables=["context", "question"]
+)
+
+def get_context(question):
+    context = retriever.invoke(question)
+    context = "".join(doc.page_content for doc in context)
+    return context
+
+def get_bot_response(query):
+    context = get_context(query)
+    final_prompt = prompt.invoke(
+        {
+            "context": context,
+            "question": query
+        }
+    )
+    result = llm.invoke(final_prompt)
+    import re
+    # Remove <think>...</think> from the response
+    clean_content = re.sub(r'<think>.*?</think>', '', result.content, flags=re.DOTALL)
+    return clean_content.strip()
