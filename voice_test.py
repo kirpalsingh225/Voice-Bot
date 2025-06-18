@@ -6,6 +6,10 @@ from main import get_bot_response
 st.set_page_config(page_title="Voice Bot", page_icon="🎤")
 st.title("Voice Bot with Voice Input & Output")
 
+# Use a separate key for voice input
+if "voice_input" not in st.session_state:
+    st.session_state["voice_input"] = ""
+
 # Function to convert text to speech
 def SpeakText(command):
     engine = pyttsx3.init()
@@ -15,7 +19,11 @@ def SpeakText(command):
 # UI: Text input with a voice icon button
 col1, col2 = st.columns([8,1])
 with col1:
-    user_input = st.text_input("Type your message or use the mic:", key="text_input")
+    user_input = st.text_input(
+        "Type your message or use the mic:",
+        value=st.session_state["voice_input"],
+        key="text_input"
+    )
 with col2:
     voice_clicked = st.button("🎤", help="Click to speak")
 
@@ -28,13 +36,13 @@ if voice_clicked:
         audio = r.listen(source)
         try:
             MyText = r.recognize_google(audio)
-            st.session_state["text_input"] = MyText
+            st.session_state["voice_input"] = MyText
             st.success(f"You said: {MyText}")
         except sr.RequestError as e:
             st.error(f"Could not request results; {e}")
         except sr.UnknownValueError:
             st.error("Sorry, I could not understand your voice.")
-    st.experimental_rerun()
+    st.rerun()
 
 # When user submits text (either typed or from voice)
 bot_response = None
@@ -44,3 +52,4 @@ if st.button("Send"):
         bot_response = get_bot_response(user_input)
         st.write(f"**Bot:** {bot_response}")
         SpeakText(bot_response)
+        st.session_state["voice_input"] = ""  # Clear after sending

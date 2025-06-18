@@ -33,7 +33,7 @@ class GeminiEmbeddings():
 loader = TextLoader("doc.txt")
 documents = loader.load()
 
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=50)
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=50)
 texts = text_splitter.split_documents(documents)
 
 vector_store = Chroma(
