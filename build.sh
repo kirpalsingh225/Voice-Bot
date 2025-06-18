@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-# Install system dependencies for pyttsx3 (eSpeak) and PyAudio
+# Install only required system dependencies for your current setup
 apt-get update && apt-get install -y \
-    espeak \
-    libespeak-dev \
-    portaudio19-dev
+    cmake \
+    pkg-config
 
 # Install Python dependencies
 pip install -r requirements.txt
