@@ -1,6 +1,4 @@
 import streamlit as st
-import platform
-import pyttsx3
 from voice import speak_text
 from main import get_bot_response
 
